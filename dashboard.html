@@ -221,6 +221,40 @@ const DIRECTORS = [
 
 let allRows = [];
 
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val) ? null : val;
+  if (typeof val === 'number') {
+    const d = new Date((val - 25569) * 86400 * 1000);
+    return isNaN(d) ? null : d;
+  }
+  const s = String(val).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const [m, d, y] = s.split('/');
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  }
+  if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('-');
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function formatDate(val) {
+  const d = parseDate(val);
+  if (!d) return "—";
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function dateToYYYYMM(val) {
+  const d = parseDate(val);
+  if (!d) return "";
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
 async function loadData() {
   document.getElementById('content').innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading connects…</p></div>`;
   try {
@@ -242,7 +276,7 @@ async function loadData() {
 }
 
 function populateMonthFilter() {
-  const months = [...new Set(allRows.map(r => (r["Meeting Date"] || "").slice(0,7)).filter(Boolean))].sort().reverse();
+  const months = [...new Set(allRows.map(r => dateToYYYYMM(r["Meeting Date"])).filter(Boolean))].sort().reverse();
   const sel = document.getElementById('f-month');
   const cur = sel.value;
   sel.innerHTML = '<option value="">All Months</option>' + months.map(m => {
@@ -254,7 +288,7 @@ function populateMonthFilter() {
 
 function updateStats(rows) {
   const thisMonth = new Date().toISOString().slice(0,7);
-  const monthCount = rows.filter(r => (r["Meeting Date"]||"").startsWith(thisMonth)).length;
+  const monthCount = rows.filter(r => dateToYYYYMM(r["Meeting Date"]) === thisMonth).length;
   const companies = new Set(rows.map(r => r["Their Company"]).filter(Boolean)).size;
   const directors = new Set(rows.map(r => r["Director Name"]).filter(Boolean)).size;
   document.getElementById('stats').innerHTML = [
@@ -274,7 +308,7 @@ function applyFilters() {
   let filtered = allRows.filter(r => {
     if (dir   && r["Director Name"] !== dir) return false;
     if (type  && r["Meeting Type"]  !== type) return false;
-    if (month && !(r["Meeting Date"]||"").startsWith(month)) return false;
+    if (month && dateToYYYYMM(r["Meeting Date"]) !== month) return false;
     if (search) {
       const blob = [r["Director Name"],r["Person Met"],r["Their Company"],r["Discussion / Outcome"],r["Next Steps"],r["Meeting Type"]].join(' ').toLowerCase();
       if (!blob.includes(search)) return false;
@@ -305,7 +339,7 @@ function renderCards(rows) {
   const groups = {};
   rows.forEach(r => {
     const d = r["Meeting Date"] || "";
-    const key = d.slice(0,7);
+    const key = dateToYYYYMM(d);
     const label = key ? new Date(key + '-01').toLocaleString('default', { month: 'long', year: 'numeric' }) : "Unknown";
     if (!groups[label]) groups[label] = [];
     groups[label].push(r);
@@ -319,7 +353,7 @@ function renderCards(rows) {
       const avatarColor = AVATAR_COLORS[dirIdx >= 0 ? dirIdx : 0];
       const initials = (r["Director Name"] || "?").split(' ').map(w=>w[0]).join('').slice(0,2);
       const badgeClass = BADGE[r["Meeting Type"]] || "badge-oth";
-      const dateStr = r["Meeting Date"] ? new Date(r["Meeting Date"]+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : "—";
+      const dateStr = formatDate(r["Meeting Date"]);
 
       html += `<div class="card">
         <div class="card-top">
